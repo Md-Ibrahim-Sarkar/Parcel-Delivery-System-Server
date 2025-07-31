@@ -1,8 +1,8 @@
 import { Server } from 'http';
 import mongoose from 'mongoose';
-import app from './app';
 import { envVars } from './app/config/env';
-
+import app from './app';
+import { createAdmin } from './app/utils/createAdmin';
 
 let server: Server;
 
@@ -22,6 +22,7 @@ const connectToDB = async () => {
 
 (async () => {
   await connectToDB();
+  await createAdmin();
 })();
 
 process.on('SIGTERM', () => {
