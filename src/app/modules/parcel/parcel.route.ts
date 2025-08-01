@@ -14,8 +14,12 @@ const router = Router()
 // only for Senders
 router.post('/create', checkAuth(...Object.values(Role)), validateRequest(createParcelZodSchema), parcelController.createParcel);
 
+
 // for senders , receivers, admin
-router.get('/get-parcels', checkAuth(...Object.values(Role)), parcelController.getAllParcels)
+router.get('/get-parcel/:id', checkAuth(...Object.values(Role)), parcelController.getAParcel)
+
+// for senders , receivers, admin
+router.get('/', checkAuth(...Object.values(Role)), parcelController.getAllParcels)
 
 // only for receivers
 router.get('/incoming-parcels', checkAuth(Role.RECEIVER), parcelController.receiverIncomingParcels);

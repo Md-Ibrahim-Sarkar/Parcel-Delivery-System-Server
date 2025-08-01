@@ -6,86 +6,111 @@ import { StatusCodes } from "http-status-codes";
 import { IsActive, Role } from "../user/user.interface";
 import { Parcel } from "./parcel.model";
 import mongoose from "mongoose";
-import { notAllowedStatus } from "../constants";
+import { QueryBuilder } from "../../utils/QueryBuilder";
+import { notAllowedStatus } from "../../constants";
 
 
+const createParcel = async (
+  payload: Partial<IParcel>,
+  decodedUser: JwtPayload
+) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
+  try {
+    const sender = await User.findById(decodedUser.userId).session(session);
 
+    if (!sender) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'User not found.');
+    }
 
-const createParcel = async (payload: Partial<IParcel>, decodedUser: JwtPayload) => {
- const sender = await User.findById(decodedUser.userId);
+    if (sender.role !== Role.SENDER) {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'Only senders can create parcels.'
+      );
+    }
 
-  if (!sender) {
-    throw new AppError(StatusCodes.BAD_REQUEST, 'User not found.');
-  }
+    if (sender.isDeleted || sender.isActive === IsActive.BLOCKED) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        'Your account is deleted or blocked.'
+      );
+    }
 
-  if (sender.role !== Role.SENDER) {
-    throw new AppError(StatusCodes.FORBIDDEN, 'Only senders can create parcels.');
-  }
+    if (!payload.receiverEmail) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        'Receiver email is required.'
+      );
+    }
 
-  if (sender.isDeleted && sender.isActive == IsActive.BLOCKED) {
-    throw new AppError(StatusCodes.BAD_REQUEST, "You are Deleted or Blocked")
-  }
+    const receiver = await User.findOne({
+      email: payload.receiverEmail,
+    }).session(session);
+    if (!receiver || receiver.role !== Role.RECEIVER) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid receiver.');
+    }
 
-  if (!payload.receiverEmail) {
-    throw new AppError(
-      StatusCodes.BAD_REQUEST,
-      'Missing required parcel information.'
-    );
-  }
+    const weight = payload.parcelDetails?.weight;
+    if (!weight) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Parcel weight is required.');
+    }
 
-  const receiver = await User.findOne({ email: payload.receiverEmail });
-  if (!receiver || receiver.role !== Role.RECEIVER) {
-    throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid receiver.');
-  }
+    const fee = (payload.fee as number) * weight;
 
-  
-  if (!payload.parcelDetails?.weight) {
-    throw new AppError(StatusCodes.BAD_REQUEST, 'Parcel weight is required');
-  }
-
-  const fee = (payload.fee as number) * payload.parcelDetails?.weight;
-
-
- const generateTrackingId = () => {
+    const generateTrackingId = () => {
       const now = new Date();
-
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const day = String(now.getDate()).padStart(2, '0');
-
       const random = Math.floor(100000 + Math.random() * 900000);
-
       return `TRK-${year}${month}${day}-${random}`;
-  };
+    };
+
+    const trackingId = generateTrackingId();
+
+    const parcel = await Parcel.create(
+      [
+        {
+          ...payload,
+          senderId: sender._id,
+          receiverEmail: payload.receiverEmail,
+          trackingId,
+          fee,
+          statusHistory: [
+            {
+              status: ParcelStatus.PENDING,
+              updatedAt: new Date(),
+              updatedBy: sender._id,
+            },
+          ],
+        },
+      ],
+      { session }
+    );
+
+    sender.Parcels.push(parcel[0]._id);
+    await sender.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return parcel[0];
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
+};
 
 
-  const trackingId = generateTrackingId();
-
-  const updatedPayload = {
-    ...payload,
-    senderId: sender._id,
-    receiverEmail: payload.receiverEmail,
-    trackingId,
-    fee,
-    statusHistory: [
-      {
-        status: ParcelStatus.PENDING,
-        updatedAt: new Date(),
-        updatedBy: sender._id,
-      },
-    ],
-  };
-
-
-  const parcel = await Parcel.create(updatedPayload);
-
-  return parcel;
-}
 
 const updateParcel = async (parcelId: string, payload: Partial<IParcel>, decodedUser: JwtPayload) => {
 
   const parcel = await Parcel.findById(parcelId);
+
+  const user = await User.findById(decodedUser.userId)
 
   if (decodedUser.role !== 'SENDER') {
     throw new AppError(StatusCodes.FORBIDDEN, 'Only sender can update parcel');
@@ -94,6 +119,9 @@ const updateParcel = async (parcelId: string, payload: Partial<IParcel>, decoded
   if (!parcel) {
     throw new AppError(StatusCodes.NOT_FOUND, 'Parcel not found');
   }
+   if (user?.isActive === IsActive.BLOCKED) {
+     throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
+   }
 
   if (parcel.senderId.toString() !== decodedUser.userId) {
     throw new AppError(StatusCodes.FORBIDDEN, 'You are not the sender of this parcel');
@@ -131,6 +159,10 @@ const cancelParcel = async (parcelId: string, decodedUser: JwtPayload) => {
     if (!parcel) {
       throw new AppError(StatusCodes.NOT_FOUND, 'Parcel not found.');
     }
+
+     if (user?.isActive === IsActive.BLOCKED) {
+       throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
+     }
 
     if (!user) {
       throw new AppError(StatusCodes.UNAUTHORIZED, 'User not found.');
@@ -179,12 +211,16 @@ const cancelParcel = async (parcelId: string, decodedUser: JwtPayload) => {
 };
 
 
-const getAllParcels = async (decodedUser:JwtPayload) => {
+const getAllParcels = async (decodedUser:JwtPayload , allQuery : Record<string, string>) => {
    const user = await User.findById(decodedUser.userId);
 
    if (!user) {
      throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
-   }
+  }
+  
+  if (user.isActive === IsActive.BLOCKED) {
+     throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
+  }
 
    let query = {};
 
@@ -194,17 +230,59 @@ const getAllParcels = async (decodedUser:JwtPayload) => {
      query = { receiverEmail: user.email };
    } else if (user.role === Role.ADMIN) {
      query = {};
-   }
+  }
+  
+  const parcels =  Parcel.find(query);
 
-  const parcels = await Parcel.find(query);
-  const totalParcel = await Parcel.countDocuments(query);
+  const queryBuilder = new QueryBuilder(parcels, allQuery)
+
+  const allParcels = queryBuilder.filter().paginate()
+  
+
+  const [data, meta] = await Promise.all([
+    allParcels.build().exec(),
+    queryBuilder.getMeta()
+  ])
+
   return {
-    data: parcels,
-    meta: {
-      total: totalParcel
-    }
-   };
+    data,
+    meta
+  };
 }
+
+const getAParcel = async (parcelId: string, decodedUser: JwtPayload) => {
+  const user = await User.findById(decodedUser.userId);
+
+  if (!user) {
+    throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+  }
+
+  if (user.isActive === IsActive.BLOCKED) {
+    throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
+  }
+
+  const parcel = await Parcel.findById(parcelId);
+  if (!parcel) {
+    throw new AppError(StatusCodes.NOT_FOUND, 'Parcel not found');
+  }
+
+  // Access control check
+  if (
+    user.role === Role.SENDER &&
+    parcel.senderId.toString() !== user._id.toString()
+  ) {
+    throw new AppError(StatusCodes.FORBIDDEN, 'Access denied to this parcel');
+  }
+
+  if (user.role === Role.RECEIVER && parcel.receiverEmail !== user.email) {
+    throw new AppError(StatusCodes.FORBIDDEN, 'Access denied to this parcel');
+  }
+
+  // Admin can access everything
+  return parcel;
+};
+
+
 
 //  fpr Receivers
 const receiverIncomingParcels = async (decodedUser: JwtPayload) => {
@@ -282,6 +360,7 @@ const confirmDelivery = async (parcelId: string, decodedUser: JwtPayload) => {
       updatedBy: receiver._id,
     });
 
+
     await parcel.save({ session });
 
     await session.commitTransaction();
@@ -290,7 +369,9 @@ const confirmDelivery = async (parcelId: string, decodedUser: JwtPayload) => {
     return parcel;
   } catch (error) {
    await session.abortTransaction();
-   session.endSession();
+    session.endSession();
+    console.error('🔴 Transaction Error:', error);
+
    throw new AppError(StatusCodes.FAILED_DEPENDENCY, 'Session Faield');
   }
 };
@@ -388,7 +469,7 @@ const deleteParcel = async (parcelId: string, decodedUser: JwtPayload) => {
     if (notAllowedStatus.includes(parcel.currentStatus)) {
       throw new AppError(
         StatusCodes.BAD_REQUEST,
-        'Dispatched or delivered parcels cannot be deleted by sender.'
+        'Dispatched, APPROVED or delivered parcels cannot be deleted by sender.'
       );
     }
   }
@@ -408,6 +489,7 @@ export const parcelServies = {
   createParcel,
   cancelParcel,
   getAllParcels,
+  getAParcel,
   receiverIncomingParcels,
   confirmDelivery,
   getDeliveryHistory,

@@ -31,7 +31,6 @@ export interface IUser {
   isVerified?: boolean;
   role: Role;
   auths: IAuthProvider[];
-  sentParcels: Types.ObjectId[];
-  receivedParcels: Types.ObjectId[];
+  Parcels: Types.ObjectId[];
   createdAt?: Date;
 }
