@@ -51,7 +51,7 @@ const cancelParcel = catchAsync(
     const decodedUser = req.user;
     const parcelId = req.params.id;
 
-    const canceldParcel = await parcelServies.cancelParcel(
+    await parcelServies.cancelParcel(
       parcelId,
       decodedUser as JwtPayload
     );
@@ -69,9 +69,10 @@ const cancelParcel = catchAsync(
 const getAllParcels = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
     const decodedUser = req.user;
-
+    const query = req.query;
     const allParcels = await parcelServies.getAllParcels(
-      decodedUser as JwtPayload
+      decodedUser as JwtPayload,
+      query as Record<string, string>
     );
 
     sendResponse(res, {
@@ -79,6 +80,24 @@ const getAllParcels = catchAsync(
       success: true,
       message: 'Parcels received successfully!',
       data: allParcels,
+    });
+  }
+);
+
+const getAParcel = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const decodedUser = req.user;
+
+    const Parcel = await parcelServies.getAParcel(
+      req.params.id,
+      decodedUser as JwtPayload
+    );
+
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Parcels received successfully!',
+      data: Parcel,
     });
   }
 );
@@ -199,6 +218,7 @@ export const parcelController = {
   updateParcel,
   cancelParcel,
   getAllParcels,
+  getAParcel,
   receiverIncomingParcels,
   confirmDelivery,
   getDeliveryHistory,

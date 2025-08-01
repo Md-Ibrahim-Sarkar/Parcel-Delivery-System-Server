@@ -1,16 +1,14 @@
 import { StatusCodes } from 'http-status-codes';
 import AppError from '../../errorHelpers/AppError';
-import { IAuthProvider, IsActive, IUser } from '../user/user.interface';
+import { IAuthProvider, IsActive } from '../user/user.interface';
 import { User } from '../user/user.model';
 import bcryptjs from 'bcryptjs';
 import {
-  createAccessTokenWithRefresh,
-  createUserTokens,
+  createAccessTokenWithRefresh
 } from '../../utils/createTokens';
 import { envVars } from '../../config/env';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import { sendEmail } from '../../utils/sendMail';
-import { name } from 'ejs';
 
 
 
@@ -54,7 +52,7 @@ const changePassword = async (
 
   user!.password = await bcryptjs.hash(newPassword, envVars.BCRYPT_SALT_ROUND);
 
-  user!.save();
+  await user!.save();
 };
 
 
@@ -162,10 +160,30 @@ const resetPassword = async (payload : Record<string, any> , decodedUser: JwtPay
 
 }
 
+
+const getMe = async (decodedUser: JwtPayload) => {
+  const me = await User.findById(decodedUser.userId)
+    .select('-password')
+    .populate({
+      path: 'Parcels',
+      select:
+        'trackingId fee statusHistory receiverEmail parcelDetails currentStatus',
+    });
+
+  if (!me) {
+    throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+  }
+
+  return me;
+};
+
+
+
 export const authServices = {
   getNewAccessToken,
   changePassword,
   setPassword,
   forgotPassword,
   resetPassword,
+  getMe,
 };

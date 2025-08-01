@@ -12,16 +12,21 @@ const router = Router()
 
 
 router.post('/login', AuthController.userLogin)
+
 router.post('/refresh-token', AuthController.getNewAccessToken)
+
 router.post('/logout', checkAuth(...Object.values(Role)), AuthController.logout)
+
 router.post('/change-password', checkAuth(...Object.values(Role)), AuthController.changePassword)
+
 router.post('/set-password', checkAuth(...Object.values(Role)), AuthController.setPassword);
 
+
 router.post('/forgot-password', checkAuth(...Object.values(Role)), AuthController.forgotPassword)
+
 router.post('/reset-password', checkAuth(...Object.values(Role)), AuthController.resetPassword);
 
-
-
+router.get('/me', checkAuth(...Object.values(Role)), AuthController.gatMe);
 
 
 // google auth routes

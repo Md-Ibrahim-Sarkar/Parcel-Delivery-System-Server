@@ -7,7 +7,7 @@ import { envVars } from '../../config/env';
 import { JwtPayload } from 'jsonwebtoken';
 
 const createUser = async (payload: Partial<IUser>) => {
-  const { email, password,name } = payload;
+  const { email, password, name } = payload;
 
   const isUserExist = await User.findOne({ email });
 
@@ -49,7 +49,10 @@ const updateUser = async (
   }
 
   if (decodedUser.role) {
-    if ( decodedUser.role === Role.SENDER || decodedUser.role === Role.RECEIVER) {
+    if (
+      decodedUser.role === Role.SENDER ||
+      decodedUser.role === Role.RECEIVER
+    ) {
       throw new AppError(StatusCodes.FORBIDDEN, 'You are not authorized');
     }
 
@@ -57,16 +60,20 @@ const updateUser = async (
       throw new AppError(StatusCodes.FORBIDDEN, 'You are not authorized');
     }
 
-
-    if (payload.password) { 
+    if (payload.password) {
       if (decodedUser.role !== Role.ADMIN) {
-          throw new AppError(  StatusCodes.FORBIDDEN,  'Only admin can update password');
+        throw new AppError(
+          StatusCodes.FORBIDDEN,
+          'Only admin can update password'
+        );
       }
 
-      const hashedPassword = await bcryptjs.hash(payload.password, envVars.BCRYPT_SALT_ROUND);
+      const hashedPassword = await bcryptjs.hash(
+        payload.password,
+        envVars.BCRYPT_SALT_ROUND
+      );
       payload.password = hashedPassword;
     }
-
 
     const newUpdatedUser = await User.findByIdAndUpdate(userId, payload, {
       new: true,
@@ -77,26 +84,26 @@ const updateUser = async (
   }
 };
 
-
 const updateUserProfile = async (
   userId: string,
   payload: Partial<IUser>,
   decodedUser: JwtPayload
-) => { 
+) => {
   const isUserExist = await User.findById(userId);
 
-
- if (!isUserExist) {
-   throw new AppError(StatusCodes.NOT_FOUND, 'User Not Found');
+  if (!isUserExist) {
+    throw new AppError(StatusCodes.NOT_FOUND, 'User Not Found');
   }
-  
 
   if (isUserExist.role !== decodedUser.role) {
     throw new AppError(StatusCodes.BAD_REQUEST, 'You are not authorized');
   }
 
   if (payload.password) {
-    throw new AppError(StatusCodes.BAD_REQUEST, 'You are not allowed to update password here!' );
+    throw new AppError(
+      StatusCodes.BAD_REQUEST,
+      'You are not allowed to update password here!'
+    );
   }
 
   if (payload.role) {
@@ -104,36 +111,44 @@ const updateUserProfile = async (
       StatusCodes.BAD_REQUEST,
       'You cannot Update your role. Only admins can update user roles.'
     );
-    
   }
 
-   const newUpdatedProfile = await User.findByIdAndUpdate(userId, payload, {
-     new: true,
-     runValidators: true,
-   });
+  const newUpdatedProfile = await User.findByIdAndUpdate(userId, payload, {
+    new: true,
+    runValidators: true,
+  });
 
-   return newUpdatedProfile;
-
-}
+  return newUpdatedProfile;
+};
 
 const getAllUser = async (decodedUser: JwtPayload) => {
-   const adminUser = await User.findById(decodedUser.userId);
+  const adminUser = await User.findById(decodedUser.userId);
 
-   if (!adminUser || adminUser.role !== Role.ADMIN) {
-     throw new AppError(
-       StatusCodes.FORBIDDEN,
-       'Only admin can access all users.'
-     );
-   }
-  const users = await User.find({})
-  const totalUser = await User.countDocuments()
+  if (!adminUser || adminUser.role !== Role.ADMIN) {
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      'Only admin can access all users.'
+    );
+  }
+
+  const users = await User.find({
+    role: { $in: [Role.SENDER, Role.RECEIVER] },
+  });
+  const totalUser = await User.countDocuments({
+    role: { $in: [Role.SENDER, Role.RECEIVER] },
+  });
 
   return {
     data: users,
     meta: {
-      total: totalUser
-    }
-  }
-}
+      total: totalUser,
+    },
+  };
+};
 
-export const userServices = { createUser, updateUser, updateUserProfile, getAllUser };
+export const userServices = {
+  createUser,
+  updateUser,
+  updateUserProfile,
+  getAllUser,
+};

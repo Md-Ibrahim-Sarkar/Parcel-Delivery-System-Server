@@ -1,7 +1,7 @@
 import bcryptjs from 'bcryptjs';
 import { User } from '../modules/user/user.model';
 import { envVars } from '../config/env';
-import { IAuthProvider, IUser, Role } from '../modules/user/user.interface';
+import { IAuthProvider, Role } from '../modules/user/user.interface';
 
 export const createAdmin = async () => {
   try {
