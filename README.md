@@ -14,7 +14,7 @@ A role-based parcel delivery management API built with **Node.js**, **Express.js
 
 ---
 
-## 📦 Features
+## 🚀 Features
 
 ✅ JWT-based Authentication & Authorization  
 ✅ Role-based access control (Admin, Sender, Receiver)  
@@ -24,6 +24,68 @@ A role-based parcel delivery management API built with **Node.js**, **Express.js
 ✅ Modular folder structure  
 ✅ Request validation & error handling  
 ✅ MongoDB with Mongoose ODM
+
+
+### 🔐 Authentication & Authorization
+JWT-based authentication system
+
+Three user roles: admin, sender, and receiver
+
+Role-based access control for all sensitive routes
+
+### 👤 User Management
+Sender and Receiver registration
+
+Admin can view, update, or delete any user
+
+User can update their own password
+
+Admin can change any user’s password securely
+
+### 📦 Parcel Management
+Senders can create parcels
+
+Parcels include full delivery info with cost, weight, destination, etc.
+Parcels track current status with a log (PENDING → APPROVED → DISPATCHED → IN_TRANSIT → DELIVERED → CONFIRMED)
+
+Only sender or admin can delete a parcel
+
+### 📝 Status Logs
+Every parcel has a statusLogs array embedded
+
+Each status update stores timestamp and updated-by info
+
+Admins can change status step-by-step
+
+### 🔎 Parcel Tracking
+Public tracking endpoint using trackingId
+
+No authentication required for tracking
+
+### 📜 Delivery History
+Sender and Receiver can view their parcel history
+
+Filtered by current status (DELIVERED, CONFIRMED, etc.)
+
+### ⚙️ Technical Highlights
+Built with Node.js, Express.js, TypeScript, and MongoDB
+
+Mongoose for ODM with schema validation
+
+Modular architecture (routes, services, controllers, etc.)
+
+Centralized error handling with custom AppError
+
+Zod for request body validation
+
+Environment variable support using .env
+
+### 🛡️ Security
+Passwords are hashed using bcrypt
+
+Sensitive routes are protected using access tokens
+
+Proper error messages and status codes
 
 ---
 
