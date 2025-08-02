@@ -36,7 +36,9 @@ export class QueryBuilder<T> {
   }
 
   async getMeta() {
-    const totalDocuments = await this.queryModal.model.countDocuments();
+    const totalDocuments = await this.queryModal.model.countDocuments({
+      role: { $ne: 'ADMIN' },
+    });
     const page = parseInt(this.query.page || '1')
     const limit = parseInt(this.query.limit || '8');
     const totalPage = Math.ceil(totalDocuments / limit);

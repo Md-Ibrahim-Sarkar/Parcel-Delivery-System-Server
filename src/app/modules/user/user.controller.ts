@@ -62,8 +62,12 @@ const updateUserProfile = catchAsync(
 const getAllUsers = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
     const decodedToken = req.user;
+    const query = req.query;
 
-    const result = await userServices.getAllUser(decodedToken as JwtPayload);
+    const result = await userServices.getAllUser(
+      decodedToken as JwtPayload,
+      query as Record<string, string>
+    );
 
     sendResponse(res, {
       success: true,
