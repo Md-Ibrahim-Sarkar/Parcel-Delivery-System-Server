@@ -4,8 +4,10 @@ import { Types } from "mongoose";
 export enum ParcelStatus {
   PENDING = 'PENDING',
   APPROVED = 'APPROVED',
+  BLOCKED = "BLOCKED",
   IN_TRANSIT = 'IN_TRANSIT',
   DELIVERED = 'DELIVERED',
+  CONFIRMED = 'CONFIRMED',
   CANCELLED = 'CANCELLED',
 }
 export interface IStatusHistory {

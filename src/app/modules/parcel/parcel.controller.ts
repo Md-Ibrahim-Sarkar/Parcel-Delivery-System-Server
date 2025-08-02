@@ -37,7 +37,7 @@ const updateParcel = catchAsync(async (req: Request, res: Response, next: NextFu
   sendResponse(res, {
     statusCode: StatusCodes.CREATED,
     success: true,
-    message: 'Parcel created Successfully!',
+    message: 'Parcel Updated Successfully!',
     data: updatedParcel,
   });
 
@@ -125,7 +125,7 @@ const confirmDelivery = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
     const decodedUser = req.user;
 
-     await parcelServies.confirmDelivery(req.params.id,
+    const data = await parcelServies.confirmDelivery(req.params.id,
       decodedUser as JwtPayload
     );
 
@@ -181,7 +181,7 @@ const trackParcelWithTrackingId = catchAsync(
 
     const parcel = await Parcel.findOne({
       trackingId: req.params.trackingId,
-    }).select('parcelDetails currentStatus');
+    }).select('parcelDetails currentStatus fee -_id');
 
     sendResponse(res, {
       statusCode: StatusCodes.OK,

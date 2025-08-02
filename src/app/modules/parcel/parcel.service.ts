@@ -97,10 +97,10 @@ const createParcel = async (
     session.endSession();
 
     return parcel[0];
-  } catch (error) {
+  } catch (error: any) {
     await session.abortTransaction();
     session.endSession();
-    throw error;
+    throw new AppError(StatusCodes.FAILED_DEPENDENCY, error.message);
   }
 };
 
@@ -112,8 +112,8 @@ const updateParcel = async (parcelId: string, payload: Partial<IParcel>, decoded
 
   const user = await User.findById(decodedUser.userId)
 
-  if (decodedUser.role !== 'SENDER') {
-    throw new AppError(StatusCodes.FORBIDDEN, 'Only sender can update parcel');
+  if (decodedUser.role === Role.RECEIVER) {
+    throw new AppError(StatusCodes.FORBIDDEN, 'Only sender and Admin can update parcel');
   }
 
   if (!parcel) {
@@ -185,7 +185,7 @@ const cancelParcel = async (parcelId: string, decodedUser: JwtPayload) => {
       );
     }
 
-    // update status here
+
     parcel.currentStatus = ParcelStatus.CANCELLED;
     parcel.statusHistory.push({
       status: ParcelStatus.CANCELLED,
@@ -199,13 +199,11 @@ const cancelParcel = async (parcelId: string, decodedUser: JwtPayload) => {
     session.endSession()
 
     return parcel;
-  } catch (error) {
+  } catch (error: any) {
     await session.abortTransaction();
     session.endSession();
-    throw new AppError(
-      StatusCodes.FAILED_DEPENDENCY,
-      'Transaction failed. It may have already been cancelled or rolled back.'
-    );
+   throw new AppError(StatusCodes.FAILED_DEPENDENCY, error.message);
+
 
   }
 };
@@ -346,19 +344,20 @@ const confirmDelivery = async (parcelId: string, decodedUser: JwtPayload) => {
       );
     }
 
-    if (parcel.currentStatus === ParcelStatus.DELIVERED) {
+    if (parcel.currentStatus === ParcelStatus.CONFIRMED) {
       throw new AppError(
         StatusCodes.BAD_REQUEST,
-        'Parcel is already delivered'
+        'Parcel has already been confirmed by the receiver.'
       );
     }
 
-    parcel.currentStatus = ParcelStatus.DELIVERED;
+
+    parcel.currentStatus = ParcelStatus.CONFIRMED;
     parcel.statusHistory.push({
-      status: ParcelStatus.DELIVERED,
+      status: ParcelStatus.CONFIRMED,
       updatedAt: new Date(),
       updatedBy: receiver._id,
-    });
+    })
 
 
     await parcel.save({ session });
@@ -367,12 +366,11 @@ const confirmDelivery = async (parcelId: string, decodedUser: JwtPayload) => {
     session.endSession();
 
     return parcel;
-  } catch (error) {
+  } catch (error: any) {
    await session.abortTransaction();
     session.endSession();
-    console.error('🔴 Transaction Error:', error);
 
-   throw new AppError(StatusCodes.FAILED_DEPENDENCY, 'Session Faield');
+   throw new AppError(StatusCodes.FAILED_DEPENDENCY,  error.message);
   }
 };
 
@@ -380,17 +378,35 @@ const confirmDelivery = async (parcelId: string, decodedUser: JwtPayload) => {
 const getDeliveryHistory = async (decodedUser: JwtPayload) => {
   const user = await User.findById(decodedUser.userId);
 
-  if (!user || user.role !== Role.RECEIVER) {
-    throw new AppError(StatusCodes.FORBIDDEN, 'Access denied');
+  if (!user) {
+    throw new AppError(StatusCodes.UNAUTHORIZED, 'User not found');
   }
 
-  const deliveredParcels = await Parcel.find({
-    receiverEmail: user.email,
-    currentStatus: ParcelStatus.DELIVERED,
-  });
+  let deliveredParcels;
+
+  if (user.role === Role.RECEIVER) {
+      deliveredParcels = await Parcel.find({
+        receiverEmail: user.email,
+        currentStatus: { $in: [ParcelStatus.DELIVERED, ParcelStatus.CONFIRMED] },
+      });
+
+  } else if (user.role === Role.SENDER) {
+
+      deliveredParcels = await Parcel.find({
+        senderId: user._id,
+        currentStatus: { $in: [ParcelStatus.DELIVERED, ParcelStatus.CONFIRMED] },
+      });
+
+  } else {
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      'Only sender or receiver can view delivery history'
+    );
+  }
 
   return deliveredParcels;
 };
+
 
 const updateParcelStatus = async (
   parcelId: string,
@@ -437,10 +453,11 @@ const updateParcelStatus = async (
     session.endSession();
 
     return updatedParcel;
-  } catch (error) {
+  } catch (error: any) {
     await session.abortTransaction();
     session.endSession();
-    throw error;
+  throw new AppError(StatusCodes.FAILED_DEPENDENCY, error.message);
+
   }
 };
 
@@ -469,7 +486,7 @@ const deleteParcel = async (parcelId: string, decodedUser: JwtPayload) => {
     if (notAllowedStatus.includes(parcel.currentStatus)) {
       throw new AppError(
         StatusCodes.BAD_REQUEST,
-        'Dispatched, APPROVED or delivered parcels cannot be deleted by sender.'
+        'CONFIRMED, APPROVED or delivered parcels cannot be deleted by sender.'
       );
     }
   }
