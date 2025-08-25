@@ -15,6 +15,7 @@ export const createParcelZodSchema = z.object({
   fee: z
     .number()
     .min(1, 'fee is required'),
+  
 });
 
 export const updateParcelZodSchema = z.object({
@@ -28,7 +29,8 @@ export const updateParcelZodSchema = z.object({
     phone: z.string().nonempty('Phone number is required').optional(),
     weight: z.number().positive('Weight must be positive').optional(),
     note: z.string().optional(),
-  }),
+  }).optional(),
+  currentStatus: z.string().optional()
 });
 
 

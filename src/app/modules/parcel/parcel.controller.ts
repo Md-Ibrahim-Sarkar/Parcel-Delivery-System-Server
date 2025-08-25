@@ -5,6 +5,7 @@ import { StatusCodes } from "http-status-codes";
 import { parcelServies } from "./parcel.service";
 import { JwtPayload } from "jsonwebtoken";
 import { Parcel } from "./parcel.model";
+import AppError from "../../errorHelpers/AppError";
 
 
 
@@ -106,9 +107,10 @@ const getAParcel = catchAsync(
 const receiverIncomingParcels = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
     const decodedUser = req.user;
-
+    const query = req.query
     const IncomingParcels = await parcelServies.receiverIncomingParcels(
-      decodedUser as JwtPayload
+      decodedUser as JwtPayload,
+      query as Record<string, string>
     );
 
     sendResponse(res, {
@@ -144,7 +146,7 @@ const getDeliveryHistory = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
     const decodedUser = req.user;
 
-   const deliveryHistory =  await parcelServies.getDeliveryHistory(decodedUser as JwtPayload);
+   const deliveryHistory =  await parcelServies.getDeliveryHistory(decodedUser as JwtPayload, req.query as Record<string, string>);
 
     sendResponse(res, {
       statusCode: StatusCodes.OK,
@@ -179,9 +181,17 @@ const updateParcelStatus = catchAsync(
 const trackParcelWithTrackingId = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
 
+    const tracId = req.params.trackingId;
+    const matchtodatabase = await Parcel.findOne({trackingId: tracId});
+    if(!matchtodatabase){
+      throw new AppError(StatusCodes.NOT_FOUND, 'No parcel found with this tracking ID');
+    }
     const parcel = await Parcel.findOne({
       trackingId: req.params.trackingId,
-    }).select('parcelDetails currentStatus fee -_id');
+    })
+      .select('-trackingId -isDeleted')
+      .populate('senderId', 'name email phone -_id')
+      .populate('statusHistory.updatedBy', 'role -_id');
 
     sendResponse(res, {
       statusCode: StatusCodes.OK,
@@ -202,7 +212,7 @@ const deleteParcel = catchAsync(
     sendResponse(res, {
       statusCode: StatusCodes.OK,
       success: true,
-      message: 'Parcel received Successfully!',
+      message: 'Parcel Delete Successfully!',
       data: null,
     });
   }

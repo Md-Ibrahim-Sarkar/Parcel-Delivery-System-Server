@@ -16,6 +16,7 @@ passport.use(
       passwordField: 'password',
     },
     async (email: string, password: string, done) => {
+      
       try {
         const isUserExist = await User.findOne({ email });
 
@@ -33,7 +34,6 @@ passport.use(
               'You have authenticated through Google. So if you want to login with credentials, then at first login with google and set a password for your Gmail and then you can login with email and password.',
           });
         }
-
         const isHashPasswordMatch = await bcryptjs.compare(
           password,
           isUserExist.password as string

@@ -21,6 +21,7 @@ import { envVars } from "../../config/env";
 const userLogin = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
       
   passport.authenticate('local', async (err: any, user: any, info: any) => {
+
     if (err) {
       console.log(err);
       
@@ -153,22 +154,22 @@ const gatMe = catchAsync(
 
 const googleCallbackController = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
-    let redirectTo = req.query.state ? (req.query.state as string) : '';
+   let redirectTo = req.query.state ? (req.query.state as string) : '';
 
-    if (redirectTo.startsWith('/')) {
-      redirectTo = redirectTo.slice(1);
-    }
-    const user = req.user;
+   if (redirectTo.startsWith('/')) {
+     redirectTo = redirectTo.slice(1);
+   }
+   const user = req.user;
 
-    if (!user) {
-      throw new AppError(StatusCodes.NOT_FOUND, 'User Not Found');
-    }
-    
-    const tokenInfo = createUserTokens(user);
-    
-    setAuthCookie(res, tokenInfo);
+   if (!user) {
+     throw new AppError(StatusCodes.NOT_FOUND, 'User Not Found');
+   }
 
-    res.redirect(`${envVars.FRONTEND_URL}/${redirectTo}`);
+   const tokenInfo = createUserTokens(user);
+
+   setAuthCookie(res, tokenInfo);
+
+   res.redirect(`${envVars.FRONTEND_URL}/${redirectTo}`);
   }
 );
 

@@ -1,14 +1,13 @@
-import { JwtPayload } from "jsonwebtoken";
-import { IParcel, ParcelStatus } from "./parcel.interface";
-import { User } from "../user/user.model";
-import AppError from "../../errorHelpers/AppError";
-import { StatusCodes } from "http-status-codes";
-import { IsActive, Role } from "../user/user.interface";
-import { Parcel } from "./parcel.model";
-import mongoose from "mongoose";
-import { QueryBuilder } from "../../utils/QueryBuilder";
-import { notAllowedStatus } from "../../constants";
-
+import { JwtPayload } from 'jsonwebtoken';
+import { IParcel, ParcelStatus } from './parcel.interface';
+import { User } from '../user/user.model';
+import AppError from '../../errorHelpers/AppError';
+import { StatusCodes } from 'http-status-codes';
+import { IsActive, Role } from '../user/user.interface';
+import { Parcel } from './parcel.model';
+import mongoose from 'mongoose';
+import { QueryBuilder } from '../../utils/QueryBuilder';
+import { notAllowedStatus, parcelSearchableFields } from '../../constants';
 
 const createParcel = async (
   payload: Partial<IParcel>,
@@ -31,6 +30,13 @@ const createParcel = async (
       );
     }
 
+    if (decodedUser.email === payload.receiverEmail) {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'You cannot sent parcel to you'
+      );
+    }
+
     if (sender.isDeleted || sender.isActive === IsActive.BLOCKED) {
       throw new AppError(
         StatusCodes.BAD_REQUEST,
@@ -45,12 +51,12 @@ const createParcel = async (
       );
     }
 
-    const receiver = await User.findOne({
-      email: payload.receiverEmail,
-    }).session(session);
-    if (!receiver || receiver.role !== Role.RECEIVER) {
-      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid receiver.');
-    }
+    // const receiver = await User.findOne({
+    //   email: payload.receiverEmail,
+    // }).session(session);
+    // if (!receiver || receiver.role !== Role.RECEIVER) {
+    //   throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid receiver.');
+    // }
 
     const weight = payload.parcelDetails?.weight;
     if (!weight) {
@@ -104,54 +110,61 @@ const createParcel = async (
   }
 };
 
-
-
-const updateParcel = async (parcelId: string, payload: Partial<IParcel>, decodedUser: JwtPayload) => {
-
+const updateParcel = async (
+  parcelId: string,
+  payload: Partial<IParcel>,
+  decodedUser: JwtPayload
+) => {
   const parcel = await Parcel.findById(parcelId);
 
-  const user = await User.findById(decodedUser.userId)
+  const user = await User.findById(decodedUser.userId);
 
   if (decodedUser.role === Role.RECEIVER) {
-    throw new AppError(StatusCodes.FORBIDDEN, 'Only sender and Admin can update parcel');
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      'Only sender and Admin can update parcel'
+    );
   }
 
   if (!parcel) {
     throw new AppError(StatusCodes.NOT_FOUND, 'Parcel not found');
   }
-   if (user?.isActive === IsActive.BLOCKED) {
-     throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
-   }
-
-  if (parcel.senderId.toString() !== decodedUser.userId) {
-    throw new AppError(StatusCodes.FORBIDDEN, 'You are not the sender of this parcel');
+  if (user?.isActive === IsActive.BLOCKED) {
+    throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
   }
 
- if (payload.currentStatus) {
-   throw new AppError(
-     StatusCodes.FORBIDDEN,
-     'You are not allowed to update the parcel status through this request.'
-   );
- }
+  if (parcel.senderId.toString() !== decodedUser.userId) {
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      'You are not the sender of this parcel'
+    );
+  }
+
+  if (payload.currentStatus) {
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      'You are not allowed to update the parcel status through this request.'
+    );
+  }
 
   const { currentStatus, statusHistory, ...senderPayload } = payload;
 
-
-  const updatedParcel = await Parcel.findByIdAndUpdate(parcelId, senderPayload, {
-    new: true,
-    runValidators: true,
-  });
+  const updatedParcel = await Parcel.findByIdAndUpdate(
+    parcelId,
+    senderPayload,
+    {
+      new: true,
+      runValidators: true,
+    }
+  );
 
   return updatedParcel;
 };
 
-
-
 const cancelParcel = async (parcelId: string, decodedUser: JwtPayload) => {
-
-  const session = await mongoose.startSession()
+  const session = await mongoose.startSession();
   session.startTransaction();
-   
+
   try {
     const parcel = await Parcel.findById(parcelId);
     const user = await User.findById(decodedUser.userId);
@@ -160,9 +173,9 @@ const cancelParcel = async (parcelId: string, decodedUser: JwtPayload) => {
       throw new AppError(StatusCodes.NOT_FOUND, 'Parcel not found.');
     }
 
-     if (user?.isActive === IsActive.BLOCKED) {
-       throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
-     }
+    if (user?.isActive === IsActive.BLOCKED) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
+    }
 
     if (!user) {
       throw new AppError(StatusCodes.UNAUTHORIZED, 'User not found.');
@@ -185,7 +198,6 @@ const cancelParcel = async (parcelId: string, decodedUser: JwtPayload) => {
       );
     }
 
-
     parcel.currentStatus = ParcelStatus.CANCELLED;
     parcel.statusHistory.push({
       status: ParcelStatus.CANCELLED,
@@ -193,60 +205,67 @@ const cancelParcel = async (parcelId: string, decodedUser: JwtPayload) => {
       updatedBy: user._id,
     });
 
-    await parcel.save({session});
+    await parcel.save({ session });
 
     await session.commitTransaction();
-    session.endSession()
+    session.endSession();
 
     return parcel;
   } catch (error: any) {
     await session.abortTransaction();
     session.endSession();
-   throw new AppError(StatusCodes.FAILED_DEPENDENCY, error.message);
-
-
+    throw new AppError(StatusCodes.FAILED_DEPENDENCY, error.message);
   }
 };
 
+const getAllParcels = async (
+  decodedUser: JwtPayload,
+  allQuery: Record<string, string>
+) => {
+  const user = await User.findById(decodedUser.userId);
 
-const getAllParcels = async (decodedUser:JwtPayload , allQuery : Record<string, string>) => {
-   const user = await User.findById(decodedUser.userId);
-
-   if (!user) {
-     throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+  if (!user) {
+    throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
   }
-  
+
   if (user.isActive === IsActive.BLOCKED) {
-     throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
+    throw new AppError(StatusCodes.BAD_REQUEST, 'User is Blocked');
   }
 
-   let query = {};
+  let query = {};
 
-   if (user.role === Role.SENDER) {
-     query = { senderId: user._id };
-   } else if (user.role === Role.RECEIVER) {
-     query = { receiverEmail: user.email };
-   } else if (user.role === Role.ADMIN) {
-     query = {};
+  if (user.role === Role.SENDER) {
+    query = { senderId: user._id };
+  } else if (user.role === Role.RECEIVER) {
+    query = { receiverEmail: user.email };
+  } else if (user.role === Role.ADMIN) {
+    query = {};
   }
-  
-  const parcels =  Parcel.find(query);
 
-  const queryBuilder = new QueryBuilder(parcels, allQuery)
+  let parcels = Parcel.find({
+    ...query,
+    isDeleted: { $ne: true },
+  })
+    .populate('statusHistory.updatedBy', 'role -_id')
+    .populate('senderId', 'name email picture');
 
-  const allParcels = queryBuilder.filter().paginate()
-  
+  const queryBuilder = new QueryBuilder(parcels, allQuery);
+
+  const allParcels = queryBuilder
+    .search(parcelSearchableFields)
+    .filter()
+    .paginate();
 
   const [data, meta] = await Promise.all([
     allParcels.build().exec(),
-    queryBuilder.getMeta()
-  ])
+    queryBuilder.getMeta(),
+  ]);
 
   return {
     data,
-    meta
+    meta,
   };
-}
+};
 
 const getAParcel = async (parcelId: string, decodedUser: JwtPayload) => {
   const user = await User.findById(decodedUser.userId);
@@ -280,10 +299,11 @@ const getAParcel = async (parcelId: string, decodedUser: JwtPayload) => {
   return parcel;
 };
 
-
-
 //  fpr Receivers
-const receiverIncomingParcels = async (decodedUser: JwtPayload) => {
+const receiverIncomingParcels = async (
+  decodedUser: JwtPayload,
+  allQuery: Record<string, string>
+) => {
   const user = await User.findById(decodedUser.userId);
 
   if (!user) {
@@ -299,26 +319,40 @@ const receiverIncomingParcels = async (decodedUser: JwtPayload) => {
 
   const query = {
     receiverEmail: user.email,
-    currentStatus: { $ne: ParcelStatus.DELIVERED },
+    currentStatus: {
+      $nin: [
+        ParcelStatus.CANCELLED,
+        ParcelStatus.CONFIRMED,
+        ParcelStatus.BLOCKED,
+      ],
+    },
   };
 
-  const IncomingParcels = await Parcel.find(query);
-  const totalIncomingParcels = await Parcel.countDocuments(query);
+  const IncomingParcels = Parcel.find(query)
+    .populate('statusHistory.updatedBy', 'role -_id')
+    .populate('senderId', 'name email picture -_id');
+  const queryBuilder = new QueryBuilder(IncomingParcels, allQuery);
+
+  const allParcels = queryBuilder
+    .search(parcelSearchableFields)
+    .filter()
+    .paginate();
+
+  const [data, meta] = await Promise.all([
+    allParcels.build().exec(),
+    queryBuilder.getMeta(),
+  ]);
 
   return {
-    data: IncomingParcels,
-    meta: {
-      total: totalIncomingParcels,
-    },
+    data,
+    meta,
   };
 };
 
-
 const confirmDelivery = async (parcelId: string, decodedUser: JwtPayload) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-   const session = await mongoose.startSession();
-        session.startTransaction();
-  
   try {
     const receiver = await User.findById(decodedUser.userId).session(session);
     if (!receiver) {
@@ -351,14 +385,12 @@ const confirmDelivery = async (parcelId: string, decodedUser: JwtPayload) => {
       );
     }
 
-
     parcel.currentStatus = ParcelStatus.CONFIRMED;
     parcel.statusHistory.push({
       status: ParcelStatus.CONFIRMED,
       updatedAt: new Date(),
       updatedBy: receiver._id,
-    })
-
+    });
 
     await parcel.save({ session });
 
@@ -367,15 +399,17 @@ const confirmDelivery = async (parcelId: string, decodedUser: JwtPayload) => {
 
     return parcel;
   } catch (error: any) {
-   await session.abortTransaction();
+    await session.abortTransaction();
     session.endSession();
 
-   throw new AppError(StatusCodes.FAILED_DEPENDENCY,  error.message);
+    throw new AppError(StatusCodes.FAILED_DEPENDENCY, error.message);
   }
 };
 
-
-const getDeliveryHistory = async (decodedUser: JwtPayload) => {
+const getDeliveryHistory = async (
+  decodedUser: JwtPayload,
+  allQuery: Record<string, string>
+) => {
   const user = await User.findById(decodedUser.userId);
 
   if (!user) {
@@ -385,18 +419,27 @@ const getDeliveryHistory = async (decodedUser: JwtPayload) => {
   let deliveredParcels;
 
   if (user.role === Role.RECEIVER) {
-      deliveredParcels = await Parcel.find({
-        receiverEmail: user.email,
-        currentStatus: { $in: [ParcelStatus.DELIVERED, ParcelStatus.CONFIRMED] },
-      });
-
+    deliveredParcels = Parcel.find({
+      receiverEmail: user.email,
+      currentStatus: {
+        $in: [
+          ParcelStatus.DELIVERED,
+          ParcelStatus.CONFIRMED,
+          ParcelStatus.CANCELLED,
+        ],
+      },
+    })
+      .populate('statusHistory.updatedBy', 'role -_id')
+      .populate('senderId', 'name email picture');
   } else if (user.role === Role.SENDER) {
-
-      deliveredParcels = await Parcel.find({
-        senderId: user._id,
-        currentStatus: { $in: [ParcelStatus.DELIVERED, ParcelStatus.CONFIRMED] },
-      });
-
+    deliveredParcels = Parcel.find({
+      senderId: user._id,
+      currentStatus: {
+        $in: [ParcelStatus.DELIVERED, ParcelStatus.CONFIRMED],
+      },
+    })
+      .populate('statusHistory.updatedBy', 'role -_id')
+      .populate('senderId', 'name email picture');
   } else {
     throw new AppError(
       StatusCodes.FORBIDDEN,
@@ -404,9 +447,23 @@ const getDeliveryHistory = async (decodedUser: JwtPayload) => {
     );
   }
 
-  return deliveredParcels;
-};
+  const queryBuilder = new QueryBuilder(deliveredParcels, allQuery);
 
+  const allParcels = queryBuilder
+    .search(parcelSearchableFields)
+    .filter()
+    .paginate();
+
+  const [data, meta] = await Promise.all([
+    allParcels.build().exec(),
+    queryBuilder.getMeta(),
+  ]);
+
+  return {
+    data,
+    meta,
+  };
+};
 
 const updateParcelStatus = async (
   parcelId: string,
@@ -456,11 +513,9 @@ const updateParcelStatus = async (
   } catch (error: any) {
     await session.abortTransaction();
     session.endSession();
-  throw new AppError(StatusCodes.FAILED_DEPENDENCY, error.message);
-
+    throw new AppError(StatusCodes.FAILED_DEPENDENCY, error.message);
   }
 };
-
 
 const deleteParcel = async (parcelId: string, decodedUser: JwtPayload) => {
   const parcel = await Parcel.findById(parcelId);
@@ -469,19 +524,14 @@ const deleteParcel = async (parcelId: string, decodedUser: JwtPayload) => {
     throw new AppError(StatusCodes.NOT_FOUND, 'Parcel not found!');
   }
 
-  const userId = decodedUser.userId;
-  const role = decodedUser.role;
-
-
-  if (role === Role.SENDER) {
-    const isOwner = parcel.senderId.toString() === userId;
+  if (decodedUser?.role === Role.SENDER) {
+    const isOwner = parcel.senderId.toString() === decodedUser.userId;
     if (!isOwner) {
       throw new AppError(
         StatusCodes.FORBIDDEN,
         'You are not the owner of this parcel.'
       );
     }
-
 
     if (notAllowedStatus.includes(parcel.currentStatus)) {
       throw new AppError(
@@ -491,10 +541,17 @@ const deleteParcel = async (parcelId: string, decodedUser: JwtPayload) => {
     }
   }
 
-  if (role === 'receiver') {
+  if (decodedUser?.role === 'receiver') {
     throw new AppError(
       StatusCodes.FORBIDDEN,
       'Receivers are not allowed to delete parcels.'
+    );
+  }
+
+  if (parcel.isDeleted === true) {
+    throw new AppError(
+      StatusCodes.BAD_REQUEST,
+      'This parcel is already deleted'
     );
   }
 

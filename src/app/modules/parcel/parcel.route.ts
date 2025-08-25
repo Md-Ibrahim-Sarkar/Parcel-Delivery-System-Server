@@ -40,7 +40,7 @@ router.patch('/cancel/:id', checkAuth(...Object.values(Role)), parcelController.
 router.patch('/update-parcel-status/:id', checkAuth(Role.ADMIN), validateRequest(updateParcelStatusZodSchema), parcelController.updateParcelStatus)
 
 // delete parcel
-router.patch('/delete/:id', checkAuth(Role.ADMIN, Role.SENDER), parcelController.deleteParcel)
+router.patch('/delete/:id', checkAuth(Role.ADMIN,Role.SENDER), parcelController.deleteParcel)
 
 // parcel track with trackingId
 router.get('/track/:trackingId', parcelController.trackParcelWithTrackingId);

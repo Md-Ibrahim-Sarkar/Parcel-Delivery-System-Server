@@ -6,9 +6,10 @@ import bcryptjs from 'bcryptjs';
 import { envVars } from '../../config/env';
 import { JwtPayload } from 'jsonwebtoken';
 import { QueryBuilder } from '../../utils/QueryBuilder';
+import { userSearchableFields } from '../../constants';
 
 const createUser = async (payload: Partial<IUser>) => {
-  const { email, password, name } = payload;
+  const { email, password, name, role } = payload;
 
   const isUserExist = await User.findOne({ email });
 
@@ -31,6 +32,7 @@ const createUser = async (payload: Partial<IUser>) => {
     password: isHashPassword,
     auths: [authProvider],
     name,
+    role,
   };
 
   const user = await User.create(userPayload);
@@ -107,10 +109,10 @@ const updateUserProfile = async (
     );
   }
 
-  if (payload.role) {
+  if (payload.role === 'ADMIN') {
     throw new AppError(
       StatusCodes.BAD_REQUEST,
-      'You cannot Update your role. Only admins can update user roles.'
+      'You cannot Update your role INTO admin. Only admins can update user roles.'
     );
   }
 
@@ -139,18 +141,22 @@ const getAllUser = async (
     role: { $in: [Role.SENDER, Role.RECEIVER] },
   });
 
-
   const queryBuilder = new QueryBuilder(users, query);
-  const allUser = queryBuilder.filter().paginate();
+
+
+  const allUsers = queryBuilder
+    .search(userSearchableFields)
+    .filter()
+    .paginate()
 
   const [data, meta] = await Promise.all([
-    allUser.build().exec(),
+    allUsers.build().exec(),
     queryBuilder.getMeta(),
   ]);
 
   return {
     data,
-    meta
+    meta,
   };
 };
 

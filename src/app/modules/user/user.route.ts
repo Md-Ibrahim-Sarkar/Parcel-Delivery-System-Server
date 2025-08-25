@@ -16,7 +16,6 @@ router.post('/register', validateRequest(createUserZodSchema), userController.cr
 router.patch('/update-profile/:id', checkAuth(...Object.values(Role)), validateRequest(updateUserZodSchema), userController.updateUserProfile)
 
 // for admin
-
 router.patch('/:id', checkAuth(Role.ADMIN), validateRequest(updateUserZodSchema), userController.updateUser);
 router.get('/all-users', checkAuth(Role.ADMIN), userController.getAllUsers)
 
